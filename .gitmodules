@@ -1,0 +1,6 @@
+[submodule "third-party/PYNQ"]
+	path = third-party/PYNQ
+	url = https://github.com/Xilinx/PYNQ.git
+[submodule "third-party/XRT"]
+	path = third-party/XRT
+	url = https://github.com/Xilinx/XRT.git
