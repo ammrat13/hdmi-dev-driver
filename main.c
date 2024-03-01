@@ -6,7 +6,8 @@
 
 int main(void) {
 
-  // Check we are running as root. We need this to be able to flash the PL.
+  // Check we are running as root. We need this to be able to flash the PL and
+  // the deal with physical memory.
   if (geteuid() != 0) {
     fprintf(stderr, "Error: must be run as root\n");
     exit(1);
