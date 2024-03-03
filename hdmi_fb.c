@@ -1,4 +1,4 @@
-#include "fb.h"
+#include "hdmi_fb.h"
 
 #include <fcntl.h>
 #include <libdrm/drm.h>
@@ -16,9 +16,9 @@ static const char *const DEV_FILE =
 //! \brief Length of the buffer we allocate in bytes
 static const size_t BUF_SIZE = 640u * 480u * 4u;
 
-fb_allocator_t *fb_allocator_open(void) {
+hdmi_fb_allocator_t *hdmi_fb_allocator_open(void) {
   // Try to allocate the return value
-  fb_allocator_t *ret = calloc(1u, sizeof(fb_allocator_t));
+  hdmi_fb_allocator_t *ret = calloc(1u, sizeof(hdmi_fb_allocator_t));
   if (ret == NULL)
     return NULL;
   // Try to open the file
@@ -31,7 +31,7 @@ fb_allocator_t *fb_allocator_open(void) {
   return ret;
 }
 
-void fb_allocator_close(fb_allocator_t *alloc) {
+void hdmi_fb_allocator_close(hdmi_fb_allocator_t *alloc) {
   // Make sure this works even if `alloc` is only partially initialized
   if (alloc != NULL) {
     if (alloc->fd != -1)
@@ -40,14 +40,14 @@ void fb_allocator_close(fb_allocator_t *alloc) {
   }
 }
 
-fb_handle_t *fb_allocate(fb_allocator_t *alloc) {
+hdmi_fb_handle_t *hdmi_fb_allocate(hdmi_fb_allocator_t *alloc) {
 
   // Edge case handling
   if (alloc == NULL)
     return NULL;
 
   // Allocate space for the return value
-  fb_handle_t *ret = calloc(1u, sizeof(fb_handle_t));
+  hdmi_fb_handle_t *ret = calloc(1u, sizeof(hdmi_fb_handle_t));
   if (ret == NULL)
     return NULL;
   // Initialize everything to a known state
@@ -110,11 +110,11 @@ fb_handle_t *fb_allocate(fb_allocator_t *alloc) {
 
   // On failure, make sure to release all the handles we got
 failure:
-  fb_free(alloc, ret);
+  hdmi_fb_free(alloc, ret);
   return NULL;
 }
 
-void fb_free(fb_allocator_t *alloc, fb_handle_t *fb) {
+void hdmi_fb_free(hdmi_fb_allocator_t *alloc, hdmi_fb_handle_t *fb) {
   // Note that this function may be called from `fb_alloc`, meaning the data may
   // be partially initialized. We should be tolerant of that.
 

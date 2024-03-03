@@ -6,7 +6,7 @@ CFLAGS := \
 	-I./third-party/XRT/src/runtime_src/core/edge/include/
 
 PROG := hdmi-dev-driver
-OFILES := main.o fb.o hdmi_dev.o
+OFILES := main.o hdmi_fb.o hdmi_dev.o
 DFILES := $(OFILES:.o=.d)
 
 .PHONY: all

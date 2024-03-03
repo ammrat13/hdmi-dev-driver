@@ -1,4 +1,4 @@
-#include "fb.h"
+#include "hdmi_fb.h"
 #include "hdmi_dev.h"
 
 #include <signal.h>
@@ -43,7 +43,7 @@ int main(void) {
   }
 
   // Create the framebuffer allocator, checking for errors
-  fb_allocator_t *fb_allocator = fb_allocator_open();
+  hdmi_fb_allocator_t *fb_allocator = hdmi_fb_allocator_open();
   if (fb_allocator == NULL) {
     fprintf(stderr, "Error: failed to open DRM device");
     exit(127);
@@ -56,13 +56,13 @@ int main(void) {
   }
 
   // Create a framebuffer and populate it with all red
-  fb_handle_t *fb_red = fb_allocate(fb_allocator);
+  hdmi_fb_handle_t *fb_red = hdmi_fb_allocate(fb_allocator);
   if (fb_red == NULL) {
     fprintf(stderr, "Error: failed to allocate framebuffer");
     exit(127);
   }
   for (size_t i = 0u; i < 640u * 480u; i++) {
-    fb_ptr(fb_red)[i] = 0x00ff0000u;
+    hdmi_fb_data(fb_red)[i] = 0x00ff0000u;
   }
 
   hdmi_dev_set_fb(fb_red);
@@ -81,7 +81,7 @@ int main(void) {
   }
 
   // We're done, so free all the resources
-  fb_free(fb_allocator, fb_red);
-  fb_allocator_close(fb_allocator);
+  hdmi_fb_free(fb_allocator, fb_red);
+  hdmi_fb_allocator_close(fb_allocator);
   hdmi_dev_close();
 }

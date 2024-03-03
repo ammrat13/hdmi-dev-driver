@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "fb.h"
+#include "hdmi_fb.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -90,4 +90,4 @@ hdmi_coordinate_t hdmi_dev_coordinate(void);
 //!
 //! The device will use the data inside the framebuffer's data region for the
 //! next frame.
-void hdmi_dev_set_fb(fb_handle_t *fb);
+void hdmi_dev_set_fb(hdmi_fb_handle_t *fb);
