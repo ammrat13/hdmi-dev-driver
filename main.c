@@ -81,6 +81,7 @@ int main(void) {
   }
 
   // We're done, so free all the resources
+  hdmi_dev_stop();
   hdmi_fb_free(fb_allocator, fb_red);
   hdmi_fb_allocator_close(fb_allocator);
   hdmi_dev_close();

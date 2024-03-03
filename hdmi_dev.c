@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 
 //! \brief Name of the firmware to program onto the PL
@@ -200,8 +201,8 @@ void hdmi_dev_close(void) {
   // This function is responsible for resetting the HDMI Peripheral to a known
   // state. It's used by the `hdmi_dev_open` function.
 
-  // If the device is running, stop it
-  hdmi_dev_stop();
+  // If the device is running, stop it. Don't wait for it though.
+  hdmi_dev_stopnow();
 
   // Close the registers which are mapped from device memory
   if (hdmi_dev.registers != MAP_FAILED) {
@@ -227,18 +228,33 @@ void hdmi_dev_start(void) {
   // coordinate valid bit first.
   (void)hdmi_dev.registers[0x1cu / 4u];
   hdmi_dev.registers[0x0u / 4u] = 0x81u;
-  while ((hdmi_dev.registers[0x1cu / 4u] & 1u) == 0u)
-    ;
+  while ((hdmi_dev.registers[0x1cu / 4u] & 1u) == 0u) {
+    // We won't be waiting here for long. The latency from startup is 19 cycles
+    // at 100MHz, so just 190ns. It's not worth sleeping.
+  }
 }
 
 void hdmi_dev_stop(void) {
   // Check to make sure we have registers. If we don't, bail.
   if (hdmi_dev.registers == MAP_FAILED)
     return;
-  // Otherwise, stop it. Wait until the device signals idle.
+  // Otherwise, stop it, then wait until the device signals idle.
+  hdmi_dev_stopnow();
+  while ((hdmi_dev.registers[0x0u / 4u] & 0x04u) == 0u) {
+    // We could be waiting here for some time - up to 17ms. Thus, we sleep for a
+    // good portion of the duration. It can be interrupted, but that's fine
+    // since it's in a loop.
+    struct timespec req = {.tv_sec = 0ul, .tv_nsec = 9000000ul};
+    nanosleep(&req, NULL);
+  }
+}
+
+void hdmi_dev_stopnow(void) {
+  // Check to make sure we have registers. If we don't, bail.
+  if (hdmi_dev.registers == MAP_FAILED)
+    return;
+  // Otherwise, stop it
   hdmi_dev.registers[0x0u / 4u] = 0x00u;
-  while ((hdmi_dev.registers[0x0u / 4u] & 0x04u) == 0u)
-    ;
 }
 
 hdmi_coordinate_t hdmi_dev_coordinate(void) {

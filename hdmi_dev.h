@@ -26,6 +26,10 @@ bool hdmi_dev_open(void);
 //!
 //! This method frees all the host-side resources currently in use by the
 //! peripheral. However, it leaves the PL and the clocks in the same state.
+//!
+//! Additionally, this method signals that the device should stop if it's still
+//! running. However, it does not wait for the peripheral to signal that it's
+//! idle. If you need that, call `hdmi_dev_stop` first.
 void hdmi_dev_close(void);
 
 //! \brief Set the HDMI Peripheral running
@@ -39,8 +43,11 @@ void hdmi_dev_start(void);
 //! \brief Inverse of `hdmi_dev_start`
 //!
 //! Again, if this method is called when the HDMI Peripheral is not open, it is
-//! a no-op.
+//! a no-op. It also waits for the peripheral to signal that it's idle.
 void hdmi_dev_stop(void);
+//! \brief Like `hdmi_dev_stop`, but don't wait for the HDMI Peripheral to be
+//!        idle
+void hdmi_dev_stopnow(void);
 
 //! \brief Type for frame ids reported by the HDMI Peripheral
 //!
