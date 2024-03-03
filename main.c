@@ -29,13 +29,13 @@ int main(void) {
   }
 
   // Create a framebuffer and populate it with all red
-  fb_t fb_red;
-  if (!fb_allocate(fb_allocator, &fb_red)) {
+  fb_handle_t *fb_red = fb_allocate(fb_allocator);
+  if (fb_red == NULL) {
     fprintf(stderr, "Error: failed to allocate framebuffer");
     exit(127);
   }
   for (size_t i = 0u; i < 640u * 480u; i++) {
-    fb_ptr(fb_red)[i] = 0x00ff0000u;
+    fb_ptr(*fb_red)[i] = 0x00ff0000u;
   }
 
   hdmi_dev_start();

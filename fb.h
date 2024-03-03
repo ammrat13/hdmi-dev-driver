@@ -33,19 +33,23 @@ void fb_allocator_close(fb_allocator_t alloc);
 //! \brief A single framebuffer
 //!
 //! Framebuffers always contain an array of 640x480 words, which are accessible
-//! using `fb_ptr`. The structure also keeps the handle used for the buffer.
-//! These framebuffers should be freed with the same allocator used to create
-//! them.
+//! using `fb_ptr`. The structure also keeps the handle internal used by the
+//! buffer. These framebuffers should be freed with the same allocator used to
+//! create them.
 //!
 //! \see fb_ptr
-typedef struct fb_t {
+typedef struct fb_handle_t {
   uint32_t handle;
   intptr_t physical_address;
   volatile uint32_t *volatile data;
-} fb_t;
+} fb_handle_t;
 
 //! \brief Get a pointer to the framebuffer's data
-static inline uint32_t *fb_ptr(fb_t fb) { return (uint32_t *)fb.data; }
+static inline uint32_t *fb_ptr(fb_handle_t fb) { return (uint32_t *)fb.data; }
 
-bool fb_allocate(fb_allocator_t alloc, fb_t *fb);
-void fb_free(fb_allocator_t alloc, fb_t fb);
+//! \brief Allocate a framebuffer with an allocator
+//! \return An `fb_handle_t` on the heap
+fb_handle_t *fb_allocate(fb_allocator_t alloc);
+//! \brief Free a framebuffer via its handle
+//! \details The framebuffer handle should not be used after this
+void fb_free(fb_allocator_t alloc, fb_handle_t *fb);

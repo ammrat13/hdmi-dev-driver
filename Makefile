@@ -1,7 +1,9 @@
 CC := gcc
 LD := gcc
 
-CFLAGS := -O2 -Wall -Wextra -Werror
+CFLAGS := \
+	-O2 -Wall -Wextra -Werror \
+	-I./third-party/XRT/src/runtime_src/core/edge/include/
 
 PROG := hdmi-dev-driver
 OFILES := main.o fb.o hdmi_dev.o

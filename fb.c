@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <libdrm/drm.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -27,15 +28,16 @@ bool fb_allocator_init(fb_allocator_t *alloc) {
 
 void fb_allocator_close(fb_allocator_t alloc) { close(alloc.fd); }
 
-bool fb_allocate(fb_allocator_t alloc, fb_t *fb) {
+fb_handle_t *fb_allocate(fb_allocator_t alloc) {
 
-  // Edge cases
-  if (fb == NULL)
-    return false;
+  // Allocate space for the return value
+  fb_handle_t *ret = calloc(1u, sizeof(fb_handle_t));
+  if (ret == NULL)
+    return NULL;
   // Initialize everything to a known state
-  fb->handle = 0;
-  fb->physical_address = ~0u;
-  fb->data = MAP_FAILED;
+  ret->handle = 0;
+  ret->physical_address = ~0u;
+  ret->data = MAP_FAILED;
 
   // Try to allocate the buffer object
   {
@@ -49,14 +51,14 @@ bool fb_allocate(fb_allocator_t alloc, fb_t *fb) {
     if (res == -1)
       goto failure;
     // Exfiltrate data
-    fb->handle = args.handle;
+    ret->handle = args.handle;
   }
 
   // Try to get the physical address of the buffer object
   {
     // Arguments
     struct drm_zocl_info_bo args = {
-        .handle = fb->handle,
+        .handle = ret->handle,
     };
     // IOCTL call
     int res = ioctl(alloc.fd, DRM_IOCTL_ZOCL_INFO_BO, &args);
@@ -67,52 +69,57 @@ bool fb_allocate(fb_allocator_t alloc, fb_t *fb) {
     // should've gotten the size we asked for.
     if (args.size != BUF_SIZE)
       goto failure;
-    fb->physical_address = (intptr_t)args.paddr;
+    ret->physical_address = (intptr_t)args.paddr;
   }
 
   // Finally, try to map the buffer into our address space
   {
     // Arguments
     struct drm_zocl_map_bo args = {
-        .handle = fb->handle,
+        .handle = ret->handle,
     };
     // IOCTL call
     int res = ioctl(alloc.fd, DRM_IOCTL_ZOCL_MAP_BO, &args);
     if (res == -1)
       goto failure;
     // MMAP call
-    fb->data = mmap(NULL, BUF_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                    alloc.fd, args.offset);
-    if (fb->data == MAP_FAILED)
+    ret->data = mmap(NULL, BUF_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
+                     alloc.fd, args.offset);
+    if (ret->data == MAP_FAILED)
       goto failure;
   }
 
   // Done
-  return true;
+  return ret;
 
-  // On failure, make sure to release all the handles we got. Also make sure to
-  // reset the data we return to the user.
+  // On failure, make sure to release all the handles we got
 failure:
-  fb_free(alloc, *fb);
-  fb->handle = 0;
-  fb->physical_address = ~0u;
-  fb->data = MAP_FAILED;
-  return false;
+  fb_free(alloc, ret);
+  return NULL;
 }
 
-void fb_free(fb_allocator_t alloc, fb_t fb) {
+void fb_free(fb_allocator_t alloc, fb_handle_t *fb) {
+  // Note that this function may be called from `fb_alloc`, meaning the data may
+  // be partially initialized. We should be tolerant of that.
+
+  // Edge case handling
+  if (fb == NULL)
+    return;
 
   // If we have data mapped, unmap it. Again, we're casting away volatile, but
   // that's fine since we're freeing the buffer.
-  if (fb.data != MAP_FAILED)
-    munmap((void *)fb.data, BUF_SIZE);
+  if (fb->data != MAP_FAILED)
+    munmap((void *)fb->data, BUF_SIZE);
 
   // The physical address is only for our bookkeeping and doesn't have any
   // resources attached to it.
 
   // Free the handle. It's a GEM object, so we just use the IOCTL to free those.
-  if (fb.handle != 0) {
-    struct drm_gem_close args = {.handle = fb.handle};
+  if (fb->handle != 0) {
+    struct drm_gem_close args = {.handle = fb->handle};
     ioctl(alloc.fd, DRM_IOCTL_GEM_CLOSE, &args);
   }
+
+  // The pointer itself is allocated on the heap, so free it
+  free(fb);
 }
