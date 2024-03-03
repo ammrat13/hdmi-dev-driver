@@ -38,6 +38,7 @@ int main(void) {
     fb_ptr(*fb_red)[i] = 0x00ff0000u;
   }
 
+  hdmi_dev_set_fb(fb_red);
   hdmi_dev_start();
 
   size_t count = 1u;

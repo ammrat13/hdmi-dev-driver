@@ -258,3 +258,14 @@ hdmi_coordinate_t hdmi_dev_coordinate(void) {
   ret.col = (raw_coord >> 0) & 0x3ffu;
   return ret;
 }
+
+void hdmi_dev_set_fb(fb_handle_t *fb) {
+  // Edge cases. Bail if we're passed an invalid handle or if we don't have
+  // registers mapped.
+  if (fb == NULL)
+    return;
+  if (hdmi_dev.registers == MAP_FAILED)
+    return;
+  // Tell the peripheral
+  hdmi_dev.registers[0x10u / 4u] = fb->physical_address;
+}

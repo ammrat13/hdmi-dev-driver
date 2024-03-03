@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "fb.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -83,3 +85,9 @@ typedef struct hdmi_coordinate_t {
 //! The result is only valid if the device has been started. Otherwise, this
 //! method just returns garbage.
 hdmi_coordinate_t hdmi_dev_coordinate(void);
+
+//! \brief Set the HDMI Peripheral to read from the specified framebuffer
+//!
+//! The device will use the data inside the framebuffer's data region for the
+//! next frame.
+void hdmi_dev_set_fb(fb_handle_t *fb);
