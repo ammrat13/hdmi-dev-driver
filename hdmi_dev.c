@@ -1,8 +1,6 @@
 #include "hdmi_dev.h"
 
 #include <fcntl.h>
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -151,9 +149,9 @@ static bool init_clocks(void) {
   // Set the clock divider for Clock 0. The input clock is 50MHz, so we want to
   // divide by half the `iopll_div` value to get a 100MHz clock.
   uint32_t clk_cfg = 0u;
-  clk_cfg |= 0u << 4;               // Source from IO PLL
-  clk_cfg |= (iopll_div / 2) << 8;  // First divider is iopll_div / 2
-  clk_cfg |= 1u << 20;              // Second divider is 1
+  clk_cfg |= 0u << 4;              // Source from IO PLL
+  clk_cfg |= (iopll_div / 2) << 8; // First divider is iopll_div / 2
+  clk_cfg |= 1u << 20;             // Second divider is 1
   slcr[0x170u / 4u] = clk_cfg;
 
   // Pull the peripheral out of reset
@@ -202,6 +200,9 @@ void hdmi_dev_close(void) {
   // This function is responsible for resetting the HDMI Peripheral to a known
   // state. It's used by the `hdmi_dev_open` function.
 
+  // If the device is running, stop it
+  hdmi_dev_stop();
+
   // Close the registers which are mapped from device memory
   if (hdmi_dev.registers != MAP_FAILED) {
     munmap((void *)hdmi_dev.registers, REGISTERS_LEN);
@@ -215,4 +216,45 @@ void hdmi_dev_close(void) {
 
   // Mark as uninitialized
   hdmi_dev.initialized = false;
+}
+
+void hdmi_dev_start(void) {
+  // Check to make sure we have registers. If we don't, bail.
+  if (hdmi_dev.registers == MAP_FAILED)
+    return;
+  // Otherwise, set it running in continuous mode. Wait until the current
+  // coordinate goes valid to know that we're running. Remember to clear the
+  // coordinate valid bit first.
+  (void)hdmi_dev.registers[0x1cu / 4u];
+  hdmi_dev.registers[0x0u / 4u] = 0x81u;
+  while ((hdmi_dev.registers[0x1cu / 4u] & 1u) == 0u)
+    ;
+}
+
+void hdmi_dev_stop(void) {
+  // Check to make sure we have registers. If we don't, bail.
+  if (hdmi_dev.registers == MAP_FAILED)
+    return;
+  // Otherwise, stop it. Wait until the device signals idle.
+  hdmi_dev.registers[0x0u / 4u] = 0x00u;
+  while ((hdmi_dev.registers[0x0u / 4u] & 0x04u) == 0u)
+    ;
+}
+
+hdmi_coordinate_t hdmi_dev_coordinate(void) {
+  // Populate the return value. It's just garbage if we need to bail.
+  hdmi_coordinate_t ret = {
+      .fid = 0u,
+      .row = 0u,
+      .col = 0u,
+  };
+  // If we don't have the registers mapped, bail
+  if (hdmi_dev.registers == MAP_FAILED)
+    return ret;
+  // Otherwise, read the raw coordinate and populate the fields
+  uint32_t raw_coord = hdmi_dev.registers[0x18u / 4u];
+  ret.fid = (raw_coord >> 20) & 0xfffu;
+  ret.row = (raw_coord >> 10) & 0x3ffu;
+  ret.col = (raw_coord >> 0) & 0x3ffu;
+  return ret;
 }
