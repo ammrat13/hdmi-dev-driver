@@ -1,10 +1,23 @@
 #include "fb.h"
 #include "hdmi_dev.h"
 
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+//! \brief Handle Ctrl+C gracefully
+//!
+//! At a bare minimum, this means shutting down the HDMI Peripheral. The OS will
+//! take care of the other resource leaks.
+void signal_handler(int signum) {
+  // We don't care what signal we got - the behavior is the same
+  (void)signum;
+  // Shutdown the peripheral, then exit
+  hdmi_dev_close();
+  _exit(2);
+}
 
 int main(void) {
 
@@ -15,7 +28,21 @@ int main(void) {
     exit(1);
   }
 
-  // Create and initialize the framebuffer allocator, checking for errors
+  // Setup graceful termination
+  {
+    // We want to block all signals during the signal handler
+    sigset_t block;
+    sigfillset(&block);
+    // Try to setup the handler
+    struct sigaction act = {.sa_handler = signal_handler, .sa_mask = block};
+    int res = sigaction(SIGINT, &act, NULL);
+    if (res != 0) {
+      fprintf(stderr, "Error: failed to set SIGINT handler");
+      exit(127);
+    }
+  }
+
+  // Create the framebuffer allocator, checking for errors
   fb_allocator_t *fb_allocator = fb_allocator_open();
   if (fb_allocator == NULL) {
     fprintf(stderr, "Error: failed to open DRM device");
