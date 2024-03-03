@@ -9,6 +9,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 //! \brief An object that can be used to allocate framebuffers
@@ -21,14 +22,14 @@ typedef struct fb_allocator_t {
   int fd;
 } fb_allocator_t;
 
-//! \brief Initialize an `fb_allocator_t`
-//! \details An allocator must be initialized before use
-//! \param[out] alloc The allocator to initialize
-//! \return Whether the initialization succeeded
-bool fb_allocator_init(fb_allocator_t *alloc);
+//! \brief Create an `fb_allocator_t`
+//! \return A pointer to the allocator on the heap, or `NULL` on failure
+fb_allocator_t *fb_allocator_open(void);
 //! \brief Close an `fb_allocator_t`
-//! \details An allocator cannot be used after it is closed
-void fb_allocator_close(fb_allocator_t alloc);
+//!
+//! This is a `free` operation - don't use `alloc` after this. However, it is
+//! legal to free a `NULL` allocator.
+void fb_allocator_close(fb_allocator_t *alloc);
 
 //! \brief A single framebuffer
 //!
@@ -45,11 +46,26 @@ typedef struct fb_handle_t {
 } fb_handle_t;
 
 //! \brief Get a pointer to the framebuffer's data
-static inline uint32_t *fb_ptr(fb_handle_t fb) { return (uint32_t *)fb.data; }
+static inline uint32_t *fb_ptr(fb_handle_t *fb) {
+  if (fb == NULL)
+    return NULL;
+  return (uint32_t *)fb->data;
+}
 
 //! \brief Allocate a framebuffer with an allocator
-//! \return An `fb_handle_t` on the heap
-fb_handle_t *fb_allocate(fb_allocator_t alloc);
+//!
+//! It is legal for the `alloc` parameter to be `NULL`. In that case, allocation
+//! always fails and returns `NULL`.
+//!
+//! \param[in] alloc The allocator to use
+//! \return An `fb_handle_t` on the heap, or `NULL` on failure
+fb_handle_t *fb_allocate(fb_allocator_t *alloc);
 //! \brief Free a framebuffer via its handle
-//! \details The framebuffer handle should not be used after this
-void fb_free(fb_allocator_t alloc, fb_handle_t *fb);
+//!
+//! The framebuffer handle should not be used after this, as it is a free
+//! operation.
+//!
+//! Additionally, if the `fb` is not `NULL`, then the `alloc` parameter must not
+//! be `NULL`. If it is, the framebuffer will not be freed and this function is
+//! a no-op.
+void fb_free(fb_allocator_t *alloc, fb_handle_t *fb);

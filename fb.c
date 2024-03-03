@@ -2,7 +2,6 @@
 
 #include <fcntl.h>
 #include <libdrm/drm.h>
-#include <stddef.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -17,18 +16,35 @@ static const char *const DEV_FILE =
 //! \brief Length of the buffer we allocate in bytes
 static const size_t BUF_SIZE = 640u * 480u * 4u;
 
-bool fb_allocator_init(fb_allocator_t *alloc) {
-  // Edge cases
-  if (alloc == NULL)
-    return false;
-  // Try to open the device file, and report whether it succeeded
-  alloc->fd = open(DEV_FILE, O_RDWR);
-  return alloc->fd != -1;
+fb_allocator_t *fb_allocator_open(void) {
+  // Try to allocate the return value
+  fb_allocator_t *ret = calloc(1u, sizeof(fb_allocator_t));
+  if (ret == NULL)
+    return NULL;
+  // Try to open the file
+  ret->fd = open(DEV_FILE, O_RDWR);
+  if (ret->fd == -1) {
+    free(ret);
+    return NULL;
+  }
+  // We succeeded on both counts
+  return ret;
 }
 
-void fb_allocator_close(fb_allocator_t alloc) { close(alloc.fd); }
+void fb_allocator_close(fb_allocator_t *alloc) {
+  // Make sure this works even if `alloc` is only partially initialized
+  if (alloc != NULL) {
+    if (alloc->fd != -1)
+      close(alloc->fd);
+    free(alloc);
+  }
+}
 
-fb_handle_t *fb_allocate(fb_allocator_t alloc) {
+fb_handle_t *fb_allocate(fb_allocator_t *alloc) {
+
+  // Edge case handling
+  if (alloc == NULL)
+    return NULL;
 
   // Allocate space for the return value
   fb_handle_t *ret = calloc(1u, sizeof(fb_handle_t));
@@ -47,7 +63,7 @@ fb_handle_t *fb_allocate(fb_allocator_t alloc) {
         .flags = DRM_ZOCL_BO_FLAGS_CMA,
     };
     // IOCTL call
-    int res = ioctl(alloc.fd, DRM_IOCTL_ZOCL_CREATE_BO, &args);
+    int res = ioctl(alloc->fd, DRM_IOCTL_ZOCL_CREATE_BO, &args);
     if (res == -1)
       goto failure;
     // Exfiltrate data
@@ -61,7 +77,7 @@ fb_handle_t *fb_allocate(fb_allocator_t alloc) {
         .handle = ret->handle,
     };
     // IOCTL call
-    int res = ioctl(alloc.fd, DRM_IOCTL_ZOCL_INFO_BO, &args);
+    int res = ioctl(alloc->fd, DRM_IOCTL_ZOCL_INFO_BO, &args);
     if (res == -1)
       goto failure;
     // Exfiltrate data. We only have 32-bit addresses, so we can ignore the
@@ -79,12 +95,12 @@ fb_handle_t *fb_allocate(fb_allocator_t alloc) {
         .handle = ret->handle,
     };
     // IOCTL call
-    int res = ioctl(alloc.fd, DRM_IOCTL_ZOCL_MAP_BO, &args);
+    int res = ioctl(alloc->fd, DRM_IOCTL_ZOCL_MAP_BO, &args);
     if (res == -1)
       goto failure;
     // MMAP call
     ret->data = mmap(NULL, BUF_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,
-                     alloc.fd, args.offset);
+                     alloc->fd, args.offset);
     if (ret->data == MAP_FAILED)
       goto failure;
   }
@@ -98,12 +114,12 @@ failure:
   return NULL;
 }
 
-void fb_free(fb_allocator_t alloc, fb_handle_t *fb) {
+void fb_free(fb_allocator_t *alloc, fb_handle_t *fb) {
   // Note that this function may be called from `fb_alloc`, meaning the data may
   // be partially initialized. We should be tolerant of that.
 
   // Edge case handling
-  if (fb == NULL)
+  if (alloc == NULL || fb == NULL)
     return;
 
   // If we have data mapped, unmap it. Again, we're casting away volatile, but
@@ -117,7 +133,7 @@ void fb_free(fb_allocator_t alloc, fb_handle_t *fb) {
   // Free the handle. It's a GEM object, so we just use the IOCTL to free those.
   if (fb->handle != 0) {
     struct drm_gem_close args = {.handle = fb->handle};
-    ioctl(alloc.fd, DRM_IOCTL_GEM_CLOSE, &args);
+    ioctl(alloc->fd, DRM_IOCTL_GEM_CLOSE, &args);
   }
 
   // The pointer itself is allocated on the heap, so free it

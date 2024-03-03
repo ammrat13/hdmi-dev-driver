@@ -16,8 +16,8 @@ int main(void) {
   }
 
   // Create and initialize the framebuffer allocator, checking for errors
-  fb_allocator_t fb_allocator;
-  if (!fb_allocator_init(&fb_allocator)) {
+  fb_allocator_t *fb_allocator = fb_allocator_open();
+  if (fb_allocator == NULL) {
     fprintf(stderr, "Error: failed to open DRM device");
     exit(127);
   }
@@ -35,7 +35,7 @@ int main(void) {
     exit(127);
   }
   for (size_t i = 0u; i < 640u * 480u; i++) {
-    fb_ptr(*fb_red)[i] = 0x00ff0000u;
+    fb_ptr(fb_red)[i] = 0x00ff0000u;
   }
 
   hdmi_dev_set_fb(fb_red);
