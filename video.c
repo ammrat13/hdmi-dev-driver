@@ -1,5 +1,6 @@
 #include "video.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 
 video_t *video_open(const char *filename) {
@@ -81,13 +82,17 @@ void video_close(video_t *video) {
   free(video);
 }
 
-//! \brief Clamp a floating-point value to [0.0f, 1.0f]
-static float clamp(float x) {
-  if (x < 0.0f)
-    return 0.0f;
-  if (x > 1.0f)
-    return 1.0f;
-  return x;
+//! \brief Convert a fixedpoint color to an 8-bit color
+//!
+//! The input is expected to be a number in the range [0, 2**24). This rescales
+//! the input to be over [0, 256). If the input falls out of that range, it is
+//! clamped to it before being scaled.
+static int_fast32_t clampscale(int_fast32_t x) {
+  if (x < 0)
+    return 0;
+  if (x >= (1 << 24))
+    return 255;
+  return (x >> 16) & 0xff;
 }
 
 int video_get_frame(video_t *video, uint32_t *framebuffer) {
@@ -132,26 +137,25 @@ retry_receive_frame:
       size_t col_y = col;
       size_t row_c = row / 2;
       size_t col_c = col / 2;
-      // Get the YUV data and convert it to floats
-      uint8_t y_i =
+      // Get the YUV data. We fetch these into 32-bit datatypes so we can do
+      // math without converting to floatingpoint.
+      int_fast32_t y =
           video->frame->data[0][row_y * video->frame->linesize[0] + col_y];
-      uint8_t u_i =
+      int_fast32_t u =
           video->frame->data[1][row_c * video->frame->linesize[1] + col_c];
-      uint8_t v_i =
+      int_fast32_t v =
           video->frame->data[2][row_c * video->frame->linesize[2] + col_c];
-      float y = y_i / 255.0f;
-      float u = (u_i / 255.0f) - 0.5f;
-      float v = (v_i / 255.0f) - 0.5f;
-      // Convert to RGB and convert that back to integers
-      float r = clamp(y + 1.28033f * v);
-      float g = clamp(y - 0.21482f * u - 0.38059f * v);
-      float b = clamp(y + 2.12798f * u);
-      uint8_t r_i = 255.0f * r;
-      uint8_t g_i = 255.0f * g;
-      uint8_t b_i = 255.0f * b;
+      y <<= 16;
+      u -= 128;
+      v -= 128;
+      // Convert to RGB values. We do all the math shifting by 2**24. Note that
+      // Y is already pre-shifted by 2**24, and u and v are already pre-shifted
+      // by 2**8.
+      int_fast32_t r = clampscale(y + 83908 * v);
+      int_fast32_t g = clampscale(y - 14078 * u - 24942 * v);
+      int_fast32_t b = clampscale(y + 139459 * u);
       // Write the packed data
-      framebuffer[row * 640u + col] =
-          ((uint32_t)r_i << 16) | ((uint32_t)g_i << 8) | ((uint32_t)b_i << 0);
+      framebuffer[row * 640u + col] = (r << 16) | (g << 8) | (b << 0);
     }
   }
 

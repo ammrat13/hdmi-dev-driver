@@ -1,4 +1,4 @@
 # Ignore build files
-hdmi-dev-driver
+hdmi-dev-video-player
 *.o
 *.d
