@@ -95,7 +95,7 @@ static int_fast32_t clampscale(int_fast32_t x) {
   return (x >> 16) & 0xff;
 }
 
-int video_get_frame(video_t *video, uint32_t *framebuffer) {
+int video_get_frame(video_t *restrict video, uint32_t *restrict framebuffer) {
 
   // Edge cases
   if (video == NULL || framebuffer == NULL)
