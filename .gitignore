@@ -2,3 +2,6 @@
 hdmi-dev-video-player
 *.o
 *.d
+
+# Ignore videos
+videos/
