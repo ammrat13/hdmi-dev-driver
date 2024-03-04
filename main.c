@@ -2,6 +2,7 @@
 #include "hdmi_fb.h"
 #include "video.h"
 
+#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -9,40 +10,53 @@
 //! \details Exits with code 1
 __attribute__((noreturn)) void usage(void) {
   const char *const USAGE =
-      "Usage: hdmi-dev-video-player [VIDEO]\n"
+      "Usage: hdmi-dev-video-player [VIDEO] [FDIV]\n"
       "Plays the video file specified by [VIDEO] using the HDMI Peripheral\n"
+      "with the frame-rate divider [FDIV]"
       "\n"
       "The input video must be 640x480@15fps, and it must have frames encoded\n"
       "as YUV420P. It also cannot have any audio associated with it - it must\n"
       "be a single stream.\n"
       "\n"
-      "Furthermore, this program must be used with the HDMI Peripheral. It\n"
-      "must be run as root to interact with the device.\n";
+      "The frame-rate divider is applied to a 60Hz refresh rate. In other\n"
+      "words, the frame rate is (60Hz / [FDIV]). Setting the divider too low\n"
+      "will cause frames to miss their deadline and for the video to be\n"
+      "played back slower. A stable value is [FDIV] = 3."
+      "\n"
+      "Finally, this program must be used with the HDMI Peripheral. It must\n"
+      "be run as root to interact with the device.\n";
   fputs(USAGE, stderr);
   exit(1);
 }
 
 //! \brief Stop the device and exit
 //!
-//! This method does not wait for the device to signal idle. It also bypasses
-//! all the atexit hooks. It is intended to installed with `sigaction`.
-__attribute__((noreturn)) void signalhandler(int signum) {
-  // We don't care what signal we received, nor do we care about cleaning up our
-  // resources.
-  (void)signum;
-  // Just stop the device and die.
-  hdmi_dev_stopnow();
+//! This method only waits for the device to signal completion on SIGINT.
+//! Otherwise, it just stops the device and exits. It also bypasses all the
+//! atexit hooks. It is intended to installed with `sigaction`.
+__attribute__((noreturn)) void signal_handler(int signum) {
+  if (signum == SIGINT)
+    hdmi_dev_stop();
+  else
+    hdmi_dev_stopnow();
   _exit(2);
 }
 
 int main(int argc, char **argv) {
 
   // Check usage
-  if (argc != 2) {
+  if (argc != 3) {
     fputs("Usage: wrong number of arguments\n", stderr);
     usage();
   } else if (geteuid() != 0) {
     fputs("Usage: must be run as root\n", stderr);
+    usage();
+  }
+
+  // Parse the frame-rate divider
+  const int FRAME_RATE_DIV = atoi(argv[2]);
+  if (FRAME_RATE_DIV <= 0) {
+    fputs("Usage: invalid frame-rate divider\n", stderr);
     usage();
   }
 
@@ -65,6 +79,17 @@ int main(int argc, char **argv) {
     fbs[i] = hdmi_fb_allocate(alloc_fb);
     if (fbs[i] == NULL) {
       fputs("Error: failed to allocate framebuffer\n", stderr);
+      exit(127);
+    }
+  }
+
+  // Setup the SIGINT and SIGTERM handlers
+  {
+    const struct sigaction args = {.sa_handler = signal_handler};
+    int res_int = sigaction(SIGINT, &args, NULL);
+    int res_term = sigaction(SIGTERM, &args, NULL);
+    if (res_int != 0 || res_term != 0) {
+      fputs("Error: couldn't setup signal handler\n", stderr);
       exit(127);
     }
   }
@@ -93,13 +118,19 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Error: got %d when decoding video\n", res);
     }
 
-    // Wait until 4 frames have elapsed since the last time we presented. If
-    // we're on the first iteration, skip this step since we don't have a last
-    // time.
+    // Wait until enough frames have elapsed since the last time we presented.
+    // If we're on the first iteration, skip this step since we don't have a
+    // last time. Also warn if too many frames have elapsed.
     if (!first) {
+      // Get the current coordinate
       hdmi_coordinate_t cur = hdmi_dev_coordinate();
-      while (hdmi_fid_delta(cur.fid, last.fid) < 4)
+      // Check for a deadline miss
+      if (hdmi_fid_delta(cur.fid, last.fid) > FRAME_RATE_DIV)
+        fputs("Warn: missed deadline\n", stderr);
+      // Wait for the deadline
+      while (hdmi_fid_delta(cur.fid, last.fid) < FRAME_RATE_DIV)
         cur = hdmi_dev_coordinate();
+      // For the next iteration
       last = cur;
     }
 
