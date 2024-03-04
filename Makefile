@@ -2,9 +2,9 @@ CC := gcc
 LD := gcc
 
 CFLAGS := \
-	-O2 -Wall -Wextra -Werror \
+	-O2 -flto -Wall -Wextra -Werror \
 	-I./third-party/XRT/src/runtime_src/core/edge/include/
-LFLAGS := -lavcodec -lavformat -lavutil
+LFLAGS := -lavcodec -lavformat -lavutil -flto
 
 PROG := hdmi-dev-video-player
 OFILES := main.o hdmi_fb.o hdmi_dev.o video.o
