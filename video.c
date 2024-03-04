@@ -1,7 +1,5 @@
 #include "video.h"
 
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
 #include <stdlib.h>
 
 video_t *video_open(const char *filename) {
