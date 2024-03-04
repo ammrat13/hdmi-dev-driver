@@ -6,10 +6,8 @@ CFLAGS := \
 	-I./third-party/XRT/src/runtime_src/core/edge/include/
 LFLAGS := -lavcodec -lavformat -lavutil
 
-PROG := hdmi-dev-driver
-OFILES := \
-	main.o \
-	video.o
+PROG := hdmi-dev-video-player
+OFILES := main.o hdmi_fb.o hdmi_dev.o video.o
 DFILES := $(OFILES:.o=.d)
 
 .PHONY: all

@@ -1,9 +1,7 @@
 #include "video.h"
 
 #include <libavcodec/avcodec.h>
-#include <libavcodec/packet.h>
 #include <libavformat/avformat.h>
-#include <libavutil/frame.h>
 #include <stdlib.h>
 
 video_t *video_open(const char *filename) {
@@ -40,7 +38,8 @@ video_t *video_open(const char *filename) {
   // ... which is 640x480.
   if (stream_codecpar->width != 640 || stream_codecpar->height != 480)
     goto failure;
-  // We can't validate the framerate since it might be unknown.
+  // We can't validate the framerate since it might be unknown. Ditto with the
+  // format.
 
   // Find the codec we're supposed to use, and create the context for it based
   // on the parameters requested by the video.
@@ -82,4 +81,83 @@ void video_close(video_t *video) {
   avcodec_free_context(&video->codec_ctx);
   avformat_close_input(&video->format_ctx);
   free(video);
+}
+
+//! \brief Clamp a floating-point value to [0.0f, 1.0f]
+static float clamp(float x) {
+  if (x < 0.0f)
+    return 0.0f;
+  if (x > 1.0f)
+    return 1.0f;
+  return x;
+}
+
+int video_get_frame(video_t *video, uint32_t *framebuffer) {
+
+  // Edge cases
+  if (video == NULL || framebuffer == NULL)
+    return AVERROR(EINVAL);
+
+retry_receive_frame:
+  // Try to get a frame from the codec
+  int rx_frame_res = avcodec_receive_frame(video->codec_ctx, video->frame);
+  // If we don't have enough data to get a frame, get more data and retry
+  if (rx_frame_res == AVERROR(EAGAIN)) {
+    // Pull a packet from the container. The stream index will always be zero
+    // since we only have the one stream.
+    int rx_packet_res = av_read_frame(video->format_ctx, video->packet);
+    if (rx_packet_res != 0)
+      return rx_packet_res;
+    // Forward that packet to the codec. After this, we no longer need the
+    // packet, so we can decrement the reference count.
+    int tx_packet_res = avcodec_send_packet(video->codec_ctx, video->packet);
+    av_packet_unref(video->packet);
+    if (tx_packet_res != 0)
+      return tx_packet_res;
+    // Do the retry
+    goto retry_receive_frame;
+  }
+  // On the other hand, if there was a legitimate error, just fail out
+  if (rx_frame_res != 0)
+    return rx_frame_res;
+
+  // We expect frames to have YUV420P format. If that's not the case, fail.
+  if (video->frame->format != AV_PIX_FMT_YUV420P)
+    return AVERROR(EINVAL);
+
+  // Convert to RGB from YUV
+  for (size_t row = 0u; row < 480u; row++) {
+    for (size_t col = 0u; col < 640u; col++) {
+      // Compute the row and column for the luminance and chrominance
+      // information
+      size_t row_y = row;
+      size_t col_y = col;
+      size_t row_c = row / 2;
+      size_t col_c = col / 2;
+      // Get the YUV data and convert it to floats
+      uint8_t y_i =
+          video->frame->data[0][row_y * video->frame->linesize[0] + col_y];
+      uint8_t u_i =
+          video->frame->data[1][row_c * video->frame->linesize[1] + col_c];
+      uint8_t v_i =
+          video->frame->data[2][row_c * video->frame->linesize[2] + col_c];
+      float y = y_i / 255.0f;
+      float u = (u_i / 255.0f) - 0.5f;
+      float v = (v_i / 255.0f) - 0.5f;
+      // Convert to RGB and convert that back to integers
+      float r = clamp(y + 1.28033f * v);
+      float g = clamp(y - 0.21482f * u - 0.38059f * v);
+      float b = clamp(y + 2.12798f * u);
+      uint8_t r_i = 255.0f * r;
+      uint8_t g_i = 255.0f * g;
+      uint8_t b_i = 255.0f * b;
+      // Write the packed data
+      framebuffer[row * 640u + col] =
+          ((uint32_t)r_i << 16) | ((uint32_t)g_i << 8) | ((uint32_t)b_i << 0);
+    }
+  }
+
+  // Free resources and return success
+  av_frame_unref(video->frame);
+  return 0;
 }

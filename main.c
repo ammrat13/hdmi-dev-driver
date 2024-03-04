@@ -10,6 +10,19 @@ int main(int argc, char **argv) {
   }
 
   video_t *vid = video_open(argv[1]);
-  printf("vid = %p\n", vid);
+  if (vid == NULL) {
+    fprintf(stderr, "Error: failed to open video\n");
+    exit(1);
+  }
+
+  uint32_t *fb = calloc(640u * 480u, sizeof(uint32_t));
+  int res;
+  size_t count = 0;
+  while ((res = video_get_frame(vid, fb)) == 0) {
+    printf("Got frame %lu\n", count++);
+  }
+  printf("Bad %d %d\n", res, AVERROR_EOF);
+
+  free(fb);
   video_close(vid);
 }
