@@ -2,8 +2,8 @@
 //! \brief Functions to read video data from files
 //!
 //! This module only interacts with very particular videos. The videos cannot
-//! have any audio associated with them. They also have to be 640x480@15fps and
-//! the pixel format has to be YUV420P.
+//! have any audio associated with them. They also have to be 640x480 and the
+//! pixel format has to be YUV420P.
 
 #pragma once
 
@@ -30,9 +30,10 @@ typedef struct video_t {
 //! \brief Open a video file
 //!
 //! As mentioned above, we only handle very particular files. The videos have to
-//! have just one stream, they must be 640x480@15fps, and they must have a pixel
-//! format of YUV420P. We can't validate the framerate nor the pixel format
-//! here, so you might have `video_get_frame` fail if those are violated.
+//! have just one stream, they must be 640x480, and they must have a pixel
+//! format of YUV420P. We can't validate the the pixel format here, so you might
+//! have `video_get_frame` fail if that constraint is violated. We also can't
+//! find the frame rate.
 //!
 //! \param[in] filename The file we should try to open as a video
 //! \return A handle to the video, or `NULL` on failure
