@@ -12,7 +12,7 @@ __attribute__((noreturn)) void usage(void) {
   const char *const USAGE =
       "Usage: hdmi-dev-video-player [VIDEO] [FDIV]\n"
       "Plays the video file specified by [VIDEO] using the HDMI Peripheral\n"
-      "with the frame-rate divider [FDIV]"
+      "with the frame-rate divider [FDIV]\n"
       "\n"
       "The input video must be 640x480, and it must have frames encoded as\n"
       "YUV420P. It also cannot have any audio associated with it - it must be\n"
@@ -21,7 +21,7 @@ __attribute__((noreturn)) void usage(void) {
       "The frame-rate divider is applied to a 60Hz refresh rate. In other\n"
       "words, the frame rate is (60Hz / [FDIV]). Setting the divider too low\n"
       "will cause frames to miss their deadline and for the video to be\n"
-      "played back slower. A stable value is [FDIV] = 3."
+      "played back slower. A stable value is [FDIV] = 3.\n"
       "\n"
       "Finally, this program must be used with the HDMI Peripheral. It must\n"
       "be run as root to interact with the device.\n";
@@ -44,7 +44,12 @@ __attribute__((noreturn)) void signal_handler(int signum) {
 
 int main(int argc, char **argv) {
 
-  // Check usage
+  // Check if the user is asking for help
+  if (argc == 2 && strcmp("help", argv[1]) == 0)
+    usage();
+  else if (argc == 2 && strcmp("--help", argv[1]) == 0)
+    usage();
+  // Check for correct usage
   if (argc != 3) {
     fputs("Usage: wrong number of arguments\n", stderr);
     usage();
@@ -54,8 +59,8 @@ int main(int argc, char **argv) {
   }
 
   // Parse the frame-rate divider
-  const int FRAME_RATE_DIV = atoi(argv[2]);
-  if (FRAME_RATE_DIV <= 0) {
+  const int FDIV = atoi(argv[2]);
+  if (FDIV <= 0) {
     fputs("Usage: invalid frame-rate divider\n", stderr);
     usage();
   }
@@ -125,10 +130,10 @@ int main(int argc, char **argv) {
       // Get the current coordinate
       hdmi_coordinate_t cur = hdmi_dev_coordinate();
       // Check for a deadline miss
-      if (hdmi_fid_delta(cur.fid, last.fid) > FRAME_RATE_DIV)
+      if (hdmi_fid_delta(cur.fid, last.fid) > FDIV)
         fputs("Warn: missed deadline\n", stderr);
       // Wait for the deadline
-      while (hdmi_fid_delta(cur.fid, last.fid) < FRAME_RATE_DIV)
+      while (hdmi_fid_delta(cur.fid, last.fid) < FDIV)
         cur = hdmi_dev_coordinate();
       // For the next iteration
       last = cur;
