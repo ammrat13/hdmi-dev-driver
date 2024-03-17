@@ -96,5 +96,6 @@ hdmi_coordinate_t hdmi_dev_coordinate(void);
 //! \brief Set the HDMI Peripheral to read from the specified framebuffer
 //!
 //! The device will use the data inside the framebuffer's data region for the
-//! next frame.
+//! next frame. This will not flush the framebuffer from the cache, so make sure
+//! to do that first.
 void hdmi_dev_set_fb(hdmi_fb_handle_t *fb);

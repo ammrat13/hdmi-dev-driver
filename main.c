@@ -122,6 +122,8 @@ int main(int argc, char **argv) {
     } else if (res != 0) {
       fprintf(stderr, "Error: got %d when decoding video\n", res);
     }
+    // Remember to flush the framebuffer from the cache before presenting
+    hdmi_fb_flush(alloc_fb, fbs[fb]);
 
     // Wait until enough frames have elapsed since the last time we presented.
     // If we're on the first iteration, skip this step since we don't have a

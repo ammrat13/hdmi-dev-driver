@@ -139,3 +139,25 @@ void hdmi_fb_free(hdmi_fb_allocator_t *alloc, hdmi_fb_handle_t *fb) {
   // The pointer itself is allocated on the heap, so free it
   free(fb);
 }
+
+void hdmi_fb_flush(hdmi_fb_allocator_t *alloc, hdmi_fb_handle_t *fb) {
+
+  // Edge case handling
+  if (alloc == NULL || fb == NULL)
+    return;
+  // Check to make sure we have a valid file descriptor and a valid handle.
+  // There shouldn't be a way to get here without that, but better safe than
+  // sorry.
+  if (alloc->fd == -1 || fb->handle == 0)
+    return;
+
+  // Arguments
+  struct drm_zocl_sync_bo args = {
+      .handle = fb->handle,
+      .dir = DRM_ZOCL_SYNC_BO_TO_DEVICE,
+      .offset = 0u,
+      .size = BUF_SIZE,
+  };
+  // IOCTL call
+  ioctl(alloc->fd, DRM_IOCTL_ZOCL_SYNC_BO, &args);
+}

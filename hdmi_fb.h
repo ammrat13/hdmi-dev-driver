@@ -69,3 +69,11 @@ hdmi_fb_handle_t *hdmi_fb_allocate(hdmi_fb_allocator_t *alloc);
 //! be `NULL`. If it is, the framebuffer will not be freed and this function is
 //! a no-op.
 void hdmi_fb_free(hdmi_fb_allocator_t *alloc, hdmi_fb_handle_t *fb);
+
+//! \brief Flush a framebuffer's contents from the cache
+//!
+//! This must be called before giving the framebuffer to the HDMI Peripheral.
+//! Otherwise, the device will read stale data.
+//!
+//! This function is a no-op if `fb` or `alloc` is `NULL`.
+void hdmi_fb_flush(hdmi_fb_allocator_t *alloc, hdmi_fb_handle_t *fb);
