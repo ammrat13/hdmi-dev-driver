@@ -59,6 +59,14 @@ video_t *video_open(const char *filename) {
   if (ret->packet == NULL || ret->frame == NULL)
     goto failure;
 
+  // Now, we need to handle the software scaling side of things. Just allocate
+  // and initialize the context. We'll use the point scaling method, since it's
+  // probably the least computationally expensive.
+  ret->sws_ctx = sws_getContext(640, 480, AV_PIX_FMT_YUV420P, 640, 480,
+                                AV_PIX_FMT_BGRA, SWS_POINT, NULL, NULL, NULL);
+  if (ret->sws_ctx == NULL)
+    goto failure;
+
   // We've setup everything we need to, so return
   return ret;
 
@@ -75,6 +83,7 @@ void video_close(video_t *video) {
   // Release all the resources. This is tolerant to having `NULL` values in
   // these fields. Also note that the format is guaranteed to either be `NULL`
   // or open because we allocated in `avformat_open_input`.
+  sws_freeContext(video->sws_ctx);
   av_packet_free(&video->packet);
   av_frame_free(&video->frame);
   avcodec_free_context(&video->codec_ctx);
@@ -82,20 +91,7 @@ void video_close(video_t *video) {
   free(video);
 }
 
-//! \brief Convert a fixedpoint color to an 8-bit color
-//!
-//! The input is expected to be a number in the range [0, 2**24). This rescales
-//! the input to be over [0, 256). If the input falls out of that range, it is
-//! clamped to it before being scaled.
-static int_fast32_t clampscale(int_fast32_t x) {
-  if (x < 0)
-    return 0;
-  if (x >= (1 << 24))
-    return 255;
-  return (x >> 16) & 0xff;
-}
-
-int video_get_frame(video_t *restrict video, uint32_t *restrict framebuffer) {
+int video_get_frame(video_t *video, uint32_t *framebuffer) {
 
   // Edge cases
   if (video == NULL || framebuffer == NULL)
@@ -126,40 +122,25 @@ retry_receive_frame:
 
   // We expect frames to have YUV420P format. If that's not the case, fail.
   if (video->frame->format != AV_PIX_FMT_YUV420P)
-    return AVERROR(EINVAL);
+    goto failure_with_frame;
 
   // Convert to RGB from YUV
-  for (size_t row = 0u; row < 480u; row++) {
-    for (size_t col = 0u; col < 640u; col++) {
-      // Compute the row and column for the luminance and chrominance
-      // information
-      size_t row_y = row;
-      size_t col_y = col;
-      size_t row_c = row / 2;
-      size_t col_c = col / 2;
-      // Get the YUV data. We fetch these into 32-bit datatypes so we can do
-      // math without converting to floatingpoint.
-      int_fast32_t y =
-          video->frame->data[0][row_y * video->frame->linesize[0] + col_y];
-      int_fast32_t u =
-          video->frame->data[1][row_c * video->frame->linesize[1] + col_c];
-      int_fast32_t v =
-          video->frame->data[2][row_c * video->frame->linesize[2] + col_c];
-      y <<= 16;
-      u -= 128;
-      v -= 128;
-      // Convert to RGB values. We do all the math shifting by 2**24. Note that
-      // Y is already pre-shifted by 2**24, and u and v are already pre-shifted
-      // by 2**8.
-      int_fast32_t r = clampscale(y + 83908 * v);
-      int_fast32_t g = clampscale(y - 14078 * u - 24942 * v);
-      int_fast32_t b = clampscale(y + 139459 * u);
-      // Write the packed data
-      framebuffer[row * 640u + col] = (r << 16) | (g << 8) | (b << 0);
-    }
+  {
+    // We can't allocate an AVFrame for the output, so we have to stub the
+    // `data` and `linesize` fields
+    uint8_t *const dst[] = {(void *)framebuffer};
+    const int dstStride[] = {640 * 4};
+    // Convert colorspaces
+    sws_scale(video->sws_ctx, (void *)video->frame->data,
+              video->frame->linesize, 0, 480, dst, dstStride);
   }
 
   // Free resources and return success
   av_frame_unref(video->frame);
   return 0;
+
+  // If we failed after successfully obtaining a frame, remember to free it
+failure_with_frame:
+  av_frame_unref(video->frame);
+  return AVERROR(EINVAL);
 }

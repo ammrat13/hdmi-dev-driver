@@ -11,6 +11,7 @@
 
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
 
 //! \brief Persistent data we need to decode videos
 //!
@@ -20,11 +21,24 @@
 //!
 //! The `packet` and `frame` fields should normally hold no data. They are
 //! allocated when reading a frame and unreferenced after that.
+//!
+//! Additionally, this structure holds the context needed for software scaling.
+//! We don't do any scaling, but we do colorspace conversion. This does not need
+//! its own frame since the framebuffer is allocated for us.
 typedef struct video_t {
+
+  //! \brief Decoding context
+  //! @{
   AVFormatContext *format_ctx;
   AVCodecContext *codec_ctx;
   AVPacket *packet;
   AVFrame *frame;
+  //! @}
+
+  //! \brief Software scaling context
+  //! @{
+  struct SwsContext *sws_ctx;
+  //! @}
 } video_t;
 
 //! \brief Open a video file
