@@ -125,33 +125,54 @@ int main(int argc, char **argv) {
     // Remember to flush the framebuffer from the cache before presenting
     hdmi_fb_flush(alloc_fb, fbs[fb]);
 
-    // Wait until enough frames have elapsed since the last time we presented.
-    // If we're on the first iteration, skip this step since we don't have a
-    // last time. Also warn if too many frames have elapsed.
-    if (!first) {
-      // Get the current coordinate
+    if (first) {
+      // If this is our first frame, we can just immediately present it. We also
+      // have to start the device, and set the coordinate on which we presented
+      // the frame so the next iteration can use it.
+      hdmi_dev_set_fb(fbs[fb]);
+      hdmi_dev_start();
+      last = hdmi_dev_coordinate();
+
+    } else {
+      // Wait until enough frames have elapsed since the last one before
+      // presenting this frame. The procedure is a bit complicated - we need to
+      // make sure the HDMI Peripheral has in fact switched to the new
+      // framebuffer before we clobber the old one. Specifically, we need to
+      // tell the device about the new framebuffer before `FDIV` frames have
+      // elapsed, then we need to wait for `FDIV` frames to actually elapse
+      // before continuing.
+
+      // We'll use this variable throughout this section to keep track of where
+      // the device is currently
       hdmi_coordinate_t cur = hdmi_dev_coordinate();
-      // Check for a deadline miss
-      if (hdmi_fid_delta(cur.fid, last.fid) > FDIV)
-        fputs("Warn: missed deadline\n", stderr);
-      // Wait for the deadline
-      while (hdmi_fid_delta(cur.fid, last.fid) < FDIV)
+      int_fast16_t fid_delta = hdmi_fid_delta(cur.fid, last.fid);
+
+      // Check that we actually met the deadline. We need some margin before we
+      // have to present, so we'll make sure we're still before the last line on
+      // the frame before. 31us should be plenty.
+      bool overshoot_frame = fid_delta >= FDIV;
+      bool overshoot_line = fid_delta == FDIV - 1 && cur.row >= 524u;
+      if (overshoot_frame || overshoot_line)
+        fputs("WARN: missed deadline\n", stderr);
+
+      // Wait until we're on the frame just before we have to present. Remember
+      // to update the state variables.
+      while (fid_delta < FDIV - 1) {
         cur = hdmi_dev_coordinate();
-      // For the next iteration
+        fid_delta = hdmi_fid_delta(cur.fid, last.fid);
+      }
+      // Give the peripheral the new framebuffer
+      hdmi_dev_set_fb(fbs[fb]);
+      // The new framebuffer won't start being used until the start of the next
+      // frame, so wait for that
+      while (fid_delta < FDIV) {
+        cur = hdmi_dev_coordinate();
+        fid_delta = hdmi_fid_delta(cur.fid, last.fid);
+      }
+
+      // Remember to update the coordinate for the next loop
       last = cur;
     }
-
-    // Present the new frame. If this is the first iteration, the device hasn't
-    // started yet.
-    hdmi_dev_set_fb(fbs[fb]);
-    if (first)
-      hdmi_dev_start();
-
-    // If we're on the first iteration, remember to set the last coordinates. We
-    // didn't do it when we were waiting above since the device hadn't started
-    // yet.
-    if (first)
-      last = hdmi_dev_coordinate();
 
     // Next
     fb = (fb + 1u) & 1u;
